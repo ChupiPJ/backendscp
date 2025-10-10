@@ -14,7 +14,7 @@ class RenderRequest(BaseModel):
 
     # Opcionales (tu plantilla actual no los necesita)
     contact_name: Optional[str] = None
-    contact_email: Optional[EmailStr] = None
+    contact_email: Optional[str] = None
     program: Optional[str] = None
     proposal_date: Optional[date] = None
 
