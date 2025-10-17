@@ -20,6 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 def _build_replacements(req: RenderRequest) -> dict:
     """
     Solo usamos los placeholders que tu plantilla necesita.
@@ -44,6 +45,7 @@ def _build_replacements(req: RenderRequest) -> dict:
 
     return repl
 
+
 @app.post("/render")
 async def render_presentation(request: RenderRequest):
     try:
@@ -51,13 +53,13 @@ async def render_presentation(request: RenderRequest):
         buf = generate_presentation(
             template_path=TEMPLATE_PATH,
             replacements=replacements,
-            slide_toggles=request.slide_toggles or {}
+            slide_toggles=request.slide_toggles or {},
         )
         filename = f"proposal_{request.company_name.replace(' ', '_')}.pptx"
         return StreamingResponse(
             io.BytesIO(buf.getvalue()),
             media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

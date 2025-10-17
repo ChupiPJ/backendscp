@@ -3,6 +3,7 @@ from io import BytesIO
 from typing import Dict
 import re
 
+
 def replace_placeholders_in_text(text_frame, replacements: Dict[str, str]) -> None:
     for paragraph in text_frame.paragraphs:
         for run in paragraph.runs:
@@ -12,15 +13,15 @@ def replace_placeholders_in_text(text_frame, replacements: Dict[str, str]) -> No
                 if key in run.text:
                     run.text = run.text.replace(key, value)
 
+
 def get_slide_tags(notes_text: str) -> list:
     # Solo letras, números y _ ; evita el rango A-z que incluye símbolos.
     pattern = r"\[\[tag:([A-Za-z0-9_]+)\]\]"
     return re.findall(pattern, notes_text or "")
 
+
 def generate_presentation(
-    template_path: str,
-    replacements: Dict[str, str],
-    slide_toggles: Dict[str, bool]
+    template_path: str, replacements: Dict[str, str], slide_toggles: Dict[str, bool]
 ) -> BytesIO:
     prs = Presentation(template_path)
 
@@ -46,7 +47,9 @@ def generate_presentation(
                 replace_placeholders_in_text(shape.text_frame, replacements)
 
         if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
-            replace_placeholders_in_text(slide.notes_slide.notes_text_frame, replacements)
+            replace_placeholders_in_text(
+                slide.notes_slide.notes_text_frame, replacements
+            )
 
     # 4) Guardar en memoria
     output = BytesIO()

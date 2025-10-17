@@ -2,12 +2,14 @@ from pydantic import BaseModel, EmailStr
 from typing import Dict, Optional
 from datetime import date
 
+
 class PricingOverrides(BaseModel):
     SETUP_FEE: Optional[int] = None
     SHORT_FEE: Optional[int] = None
     FULL_FEE: Optional[int] = None
     GRANT_FEE: Optional[str] = None  # e.g., "9%"
     EQUITY_FEE: Optional[str] = None  # e.g., "3%"
+
 
 class RenderRequest(BaseModel):
     company_name: str
