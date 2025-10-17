@@ -6,6 +6,7 @@ import io
 
 from .models import RenderRequest
 from .ppt import generate_presentation
+from .pdf_converter import PDFConverter, OnlinePDFConverter
 
 TEMPLATE_PATH = str(Path(__file__).parent / "templates" / "silicon_eic_template.pptx")
 
@@ -63,3 +64,40 @@ async def render_presentation(request: RenderRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/render_pdf")
+async def render_presentation_pdf(request: RenderRequest):
+    """
+    Nuevo endpoint que devuelve pdf en vez de pptx
+    """
+    try:
+        # 1) Generar pptx
+        replacements = _build_replacements(request)
+        ppt_buffer = generate_presentation(
+            template_path=TEMPLATE_PATH,
+            replacements=replacements,
+            slide_toggles=request.slide_toggles or {},
+        )
+        # 2) Convertir pptx a pdf
+        try:
+            pdf_buffer = PDFConverter.converter_pptx_to_pdf(ppt_buffer)
+        except Exception as conv_error:
+            print(f"Error in local conversion: {conv_error}. Trying online service...")
+            pdf_buffer = OnlinePDFConverter.convert_pptx_to_pdf(ppt_buffer)
+        # 3) Devolver pdf
+        filename = f"proposal_{request.company_name.replace(' ', '_')}.pdf"
+        return StreamingResponse(
+            io.BytesIO(pdf_buffer.getvalue()),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al generar el pdf: {str(e)}")
+    
+""" @app.post("/render-format")
+async def render_presentation_format(request: RenderRequest, format: str="pptx"):
+    Endpoint que devuelve pptx o pdf según el parámetro 'format'
+    try: """
+
+    
+
