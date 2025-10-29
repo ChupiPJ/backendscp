@@ -1,12 +1,15 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pathlib import Path
+# from pathlib import Path
 import io
 
 from .models import RenderRequest
 from .ppt import generate_presentation
-from .pdf_converter import PDFConverter, OnlinePDFConverter
+# from .pdf_converter import PDFConverter, OnlinePDFConverter
+import tempfile
+import subprocess
+import os
 
 TEMPLATE_PATH = str(Path(__file__).parent / "templates" / "silicon_eic_template.pptx")
 
@@ -65,39 +68,70 @@ async def render_presentation(request: RenderRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/render_pdf")
 async def render_presentation_pdf(request: RenderRequest):
     """
     Nuevo endpoint que devuelve pdf en vez de pptx
     """
     try:
-        # 1) Generar pptx
-        replacements = _build_replacements(request)
-        ppt_buffer = generate_presentation(
+        if not os.path.exists(TEMPLATE_PATH):
+            raise HTTPException(status_code=500, detail="Template file not found.")
+        overrides = requests.pricing_overrides
+        replacements = {
+            "{COMPANY_NAME}": request.company_name,
+            "{SETUP_FEE}": f"{overrides.SETUP_FEE: ,.0f}$".replace(",",""),
+            "{SHORT_FEE}": f"{overrides.SHORT_FEE: ,.0f}$".replace(",",""),
+            "{FULL_FEE}": f"{overrides.FULL_FEE: ,.0f}$".replace(",",""),
+            "{GRANT_FEE}": overrides.GRANT_FEE,
+            "{EQUITY_FEE}": overrides.EQUITY_FEE,
+            "{DATE}": request.proposal_date.strftime("%B %d, %Y"),
+        }
+        pptx_stream = generate_presentation(
             template_path=TEMPLATE_PATH,
             replacements=replacements,
-            slide_toggles=request.slide_toggles or {},
+            slide_toggles=request.slide_toggles
         )
-        # 2) Convertir pptx a pdf
-        try:
-            pdf_buffer = PDFConverter.converter_pptx_to_pdf(ppt_buffer)
-        except Exception as conv_error:
-            print(f"Error in local conversion: {conv_error}. Trying online service...")
-            pdf_buffer = OnlinePDFConverter.convert_pptx_to_pdf(ppt_buffer)
-        # 3) Devolver pdf
-        filename = f"proposal_{request.company_name.replace(' ', '_')}.pdf"
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pptx") as pptx_temp:
+            pptx_temp.write(pptx_stream.getvalue())
+            pptx_temp.flush()
+            pptx_path = pptx_temp.name
+
+        pdf_path = pptx_path.replace(".pptx", ".pdf")
+
+        subprocess.run([
+            "libreoffice",
+            "--headless",
+            "--convert-to",
+            "pdf",
+            pptx_path,
+            "--outdir",
+            os.path.dirname(pptx_path)
+        ], check=True)
+
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+        
+        os.remove(pptx_path)
+
+        os.remove(pdf_path)
+
+        safe_company = "".join(c if c.isalnum() or c in " _-" else "_" for c in request.company_name)
+        filename = f"proposal_eic_template_{safe_company}.pdf"
+
         return StreamingResponse(
-            io.BytesIO(pdf_buffer.getvalue()),
+            io.BytesIO(pdf_bytes),
             media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al generar el pdf: {str(e)}")
     
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=500, detail=f"error converting to libreoffice: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"error general: {str(e)}")
+
 """ @app.post("/render-format")
 async def render_presentation_format(request: RenderRequest, format: str="pptx"):
     Endpoint que devuelve pptx o pdf según el parámetro 'format'
     try: """
-
-    
-
