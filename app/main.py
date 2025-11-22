@@ -1,12 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-# from pathlib import Path
+from pathlib import Path
 import io
 
 from .models import RenderRequest
 from .ppt import generate_presentation
-# from .pdf_converter import PDFConverter, OnlinePDFConverter
 import tempfile
 import subprocess
 import os
