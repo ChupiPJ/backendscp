@@ -77,20 +77,16 @@ async def render_presentation_pdf(request: RenderRequest):
     try:
         if not os.path.exists(TEMPLATE_PATH):
             raise HTTPException(status_code=500, detail="Template file not found.")
-        overrides = requests.pricing_overrides
-        replacements = {
-            "{COMPANY_NAME}": request.company_name,
-            "{SETUP_FEE}": f"{overrides.SETUP_FEE: ,.0f}$".replace(",",""),
-            "{SHORT_FEE}": f"{overrides.SHORT_FEE: ,.0f}$".replace(",",""),
-            "{FULL_FEE}": f"{overrides.FULL_FEE: ,.0f}$".replace(",",""),
-            "{GRANT_FEE}": overrides.GRANT_FEE,
-            "{EQUITY_FEE}": overrides.EQUITY_FEE,
-            "{DATE}": request.proposal_date.strftime("%B %d, %Y"),
-        }
+        replacements=_build_replacements(request)
+        if request.proposal_date:
+            replacements["{{DATE}}"] = request.proposal_date.strftime("%B %d, %Y")
+        else:
+            replacements["{{DATE}}"] = ""
+
         pptx_stream = generate_presentation(
             template_path=TEMPLATE_PATH,
             replacements=replacements,
-            slide_toggles=request.slide_toggles
+            slide_toggles=request.slide_toggles or {}
         )
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pptx") as pptx_temp:

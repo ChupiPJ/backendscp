@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-env debian_frontend=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y libreoffice &&  apt-get clean
+RUN apt-get update && apt-get install -y libreoffice && apt-get clean
 
 WORKDIR /app
 
