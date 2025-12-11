@@ -3,7 +3,8 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import io
-
+from pptx import Presentation
+import re
 from .models import RenderRequest
 from .ppt import generate_presentation
 import tempfile
@@ -222,5 +223,74 @@ async def render_pdf_custom(request: RenderRequest, remove_slides: list[int] = [
         raise HTTPException(
             status_code=500, detail=f"libreoffice conversion error: {str(e)}"
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"General error: {str(e)}")
+    
+@app.post("/render_pptx_custom")
+async def render_pptx_custom(request: RenderRequest, remove_slides: list[int] = []):
+    """
+    Igual que render_pdf_custom pero devolviendo PPTX modificado.
+    """
+    try:
+        if not os.path.exists(TEMPLATE_PATH):
+            raise HTTPException(status_code=500, detail="Template file not found.")
+
+        # Build replacements
+        replacements = _build_replacements(request)
+        if request.proposal_date:
+            replacements["{{DATE}}"] = request.proposal_date.strftime("%B %d, %Y")
+        else:
+            replacements["{{DATE}}"] = ""
+
+        # Convert slide numbers (1-based → 0-based)
+        remove_idx = sorted([s - 1 for s in remove_slides if s > 0])
+
+        # 1. Create base PPTX
+        pptx_stream = generate_presentation(
+                template_path=TEMPLATE_PATH,
+                replacements=replacements,
+                slide_toggles=request.slide_toggles or {},
+            )
+
+        # 2. Save temp PPTX
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pptx") as temp_pptx:
+            temp_pptx.write(pptx_stream.getvalue())
+            temp_pptx.flush()
+            pptx_path = temp_pptx.name
+
+        # 3. Load PPTX and remove slides
+        from pptx import Presentation
+        prs = Presentation(pptx_path)
+
+        for idx in reversed(remove_idx):
+            if 0 <= idx < len(prs.slides._sldIdLst):
+                rId = prs.slides._sldIdLst[idx].rId
+                prs.part.drop_rel(rId)
+                del prs.slides._sldIdLst[idx]
+
+        # 4. Save final PPTX
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pptx") as final_pptx:
+            prs.save(final_pptx.name)
+            final_pptx_path = final_pptx.name
+
+        # Read output file
+        with open(final_pptx_path, "rb") as f:
+            pptx_bytes = f.read()
+
+        # Cleanup
+        os.remove(pptx_path)
+        os.remove(final_pptx_path)
+
+        safe_company = "".join(
+            c if c.isalnum() or c in " -" else "" for c in request.company_name
+        )
+        filename = f"proposal_custom_{safe_company}.pptx"
+
+        return StreamingResponse(
+            io.BytesIO(pptx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"General error: {str(e)}")
